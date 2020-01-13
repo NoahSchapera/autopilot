@@ -8,6 +8,18 @@
 #include <Servo.h>
 #include <Wire.h>
 
+//parsing vars
+const byte numChars = 32;
+char receivedChars[numChars];
+char tempChars[numChars];        // temporary array for use when parsing
+
+      // variables to hold the parsed data
+int integerFromPC1 = 0;
+int integerFromPC2 = 0;
+int integerFromPC3= 0;
+
+boolean newData = false;
+
 
 //GPS VARS
 static const int RXPin = 4, TXPin = 3;
@@ -49,6 +61,7 @@ int YawAngle = 0;
 
 void ServoSetup()
 {
+  //attach servos, set them to 90
   Pitch.attach(8);
   Yaw.attach(9);
   Roll1.attach(10);
@@ -109,14 +122,23 @@ void setup() {
 void loop() 
 {
   
-  if (receive.available())                //check when received data available
-  {
-    char data[32];
-    receive.read(&data, sizeof(data));
+ // if (receive.available())                //check when received data available
+ // {
+   // char data[32];
+   // receive.read(&data, sizeof(data));
     //Serial.println(data);                   //print data to serial monitor
-  sscanf(data, "%d", &TargetAngle);
-  }
+ // sscanf(data, "%d", &TargetAngle);
+ // }
 
+
+  recvWithStartEndMarkers();
+  if (newData == true)
+  {
+    strcpy(tempChars, recievedChars);
+    parseData();
+    newData = false;
+  }
+//every ten seconds, update target bearing
   if(millis()%10000 == 1)
   {
     encodePosition();
@@ -196,4 +218,51 @@ double  getBearing(double latNow, double longNow, double destinLat, double desti
   //cout << Y << endl;
   double bearing = (180*atan2(X,Y))/3.1415;
   return bearing;
+}
+
+void recvWithStartEndMarkers() {
+    static boolean recvInProgress = false;
+    static byte ndx = 0;
+    char startMarker = '<';
+    char endMarker = '>';
+    char rc;
+
+    while (recieve.available() > 0 && newData == false) {
+        rc = recieve.read();
+
+        if (recvInProgress == true) {
+            if (rc != endMarker) {
+                receivedChars[ndx] = rc;
+                ndx++;
+                if (ndx >= numChars) {
+                    ndx = numChars - 1;
+                }
+            }
+            else {
+                receivedChars[ndx] = '\0'; // terminate the string
+                recvInProgress = false;
+                ndx = 0;
+                newData = true;
+            }
+        }
+
+        else if (rc == startMarker) {
+            recvInProgress = true;
+        }
+    }
+}
+
+void parseData() {      // split the data into its parts
+
+    char * strtokIndx; // this is used by strtok() as an index
+
+    strtokIndx = strtok(tempChars,",");      // get the first part - the string
+    integerFromPC1 = atoi(strtokIndx); // copy it to messageFromPC
+ 
+    strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
+    integerFromPC2 = atoi(strtokIndx);     // convert this part to an integer
+
+    strtokIndx = strtok(NULL, ",");
+    integerFromPC3 = atoi(strtokIndx);     // convert this part to a float
+
 }
